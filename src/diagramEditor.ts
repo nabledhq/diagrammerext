@@ -1,5 +1,12 @@
 import * as vscode from 'vscode';
-import { Diagram, DiagramParseError, parseDiagram, serializeDiagram } from './model/diagram';
+import { autoLayout, DEFAULT_LAYOUT_MODE, isLayoutMode, LayoutMode, placeUnpositioned } from './layout';
+import {
+    createEmptyDiagram,
+    Diagram,
+    DiagramParseError,
+    parseDiagramWithPlacement,
+    serializeDiagram,
+} from './model/diagram';
 import type { HostToWebviewMessage, WebviewToHostMessage } from './protocol';
 
 export const DIAGRAM_EDITOR_VIEW_TYPE = 'diagrammer.diagramEditor';
@@ -20,8 +27,8 @@ export interface RenderReport {
 export class DiagramDocument implements vscode.CustomDocument {
     static async create(uri: vscode.Uri, backupId: string | undefined): Promise<DiagramDocument> {
         const source = backupId ? vscode.Uri.parse(backupId) : uri;
-        const { diagram, error } = await readDiagram(source);
-        return new DiagramDocument(uri, diagram, error);
+        const { diagram, unpositioned, error } = await readDiagram(source);
+        return new DiagramDocument(uri, diagram, error, unpositioned);
     }
 
     private readonly _onDidDispose = new vscode.EventEmitter<void>();
@@ -38,6 +45,7 @@ export class DiagramDocument implements vscode.CustomDocument {
         readonly uri: vscode.Uri,
         private _diagram: Diagram,
         private _parseError: string | undefined,
+        private _unpositioned: string[] = [],
     ) {}
 
     get diagram(): Diagram {
@@ -47,6 +55,20 @@ export class DiagramDocument implements vscode.CustomDocument {
     /** Set when the file on disk could not be parsed; the editor is read-only in that state. */
     get parseError(): string | undefined {
         return this._parseError;
+    }
+
+    /**
+     * Positions nodes that were loaded without x/y, using the default layout. This goes through
+     * `applyEdit`, so the document becomes dirty and the placement can be undone. Runs at most once
+     * per load; diagrams whose nodes all have coordinates are never touched.
+     */
+    placeUnpositionedNodes(): void {
+        if (this._unpositioned.length === 0) {
+            return;
+        }
+        const unpositioned = this._unpositioned;
+        this._unpositioned = [];
+        this.applyEdit('Auto layout', placeUnpositioned(this._diagram, unpositioned));
     }
 
     applyEdit(label: string, diagram: Diagram): void {
@@ -79,9 +101,11 @@ export class DiagramDocument implements vscode.CustomDocument {
     }
 
     async revert(): Promise<void> {
-        const { diagram, error } = await readDiagram(this.uri);
+        const { diagram, unpositioned, error } = await readDiagram(this.uri);
         this._parseError = error;
-        this.setDiagram(diagram);
+        this._unpositioned = [];
+        // Reverting is not an edit, so nodes without coordinates are placed directly.
+        this.setDiagram(placeUnpositioned(diagram, unpositioned));
     }
 
     async backup(destination: vscode.Uri, cancellation: vscode.CancellationToken): Promise<vscode.CustomDocumentBackup> {
@@ -111,14 +135,14 @@ export class DiagramDocument implements vscode.CustomDocument {
     }
 }
 
-async function readDiagram(uri: vscode.Uri): Promise<{ diagram: Diagram; error?: string }> {
+async function readDiagram(uri: vscode.Uri): Promise<{ diagram: Diagram; unpositioned: string[]; error?: string }> {
     const bytes = await vscode.workspace.fs.readFile(uri);
     const text = new TextDecoder().decode(bytes);
     try {
-        return { diagram: parseDiagram(text) };
+        return parseDiagramWithPlacement(text);
     } catch (err) {
         const message = err instanceof DiagramParseError ? err.message : String(err);
-        return { diagram: parseDiagram(''), error: message };
+        return { diagram: createEmptyDiagram(), unpositioned: [], error: message };
     }
 }
 
@@ -145,6 +169,7 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
     readonly onDidRender = this._onDidRender.event;
 
     private readonly webviews = new Map<string, Set<vscode.WebviewPanel>>();
+    private readonly documents = new Map<string, DiagramDocument>();
 
     constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -178,10 +203,12 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
             this.webviews.set(key, panels);
         }
         panels.add(panel);
+        this.documents.set(key, document);
         panel.onDidDispose(() => {
             panels.delete(panel);
             if (panels.size === 0) {
                 this.webviews.delete(key);
+                this.documents.delete(key);
             }
         });
 
@@ -197,6 +224,7 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
         panel.webview.onDidReceiveMessage((message: WebviewToHostMessage) => {
             switch (message.type) {
                 case 'ready':
+                    document.placeUnpositionedNodes();
                     this.postMessage(
                         panel,
                         document.parseError ? errorMessage(document) : { type: 'init', diagram: document.diagram },
@@ -210,11 +238,48 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
                         }
                     }
                     break;
+                case 'autoLayout':
+                    this.autoLayout(document, isLayoutMode(message.mode) ? message.mode : DEFAULT_LAYOUT_MODE);
+                    break;
                 case 'rendered':
                     this._onDidRender.fire({ uri: document.uri, nodes: message.nodes, edges: message.edges });
                     break;
             }
         });
+    }
+
+    /**
+     * Lays out the diagram shown in the active Diagrammer editor, or the open diagram with the given
+     * URI. Returns `true` if any node moved.
+     */
+    autoLayoutEditor(mode: LayoutMode = DEFAULT_LAYOUT_MODE, uri?: vscode.Uri): boolean {
+        const target = uri ?? activeDiagramUri();
+        const document = target ? this.documents.get(target.toString()) : undefined;
+        if (!document) {
+            void vscode.window.showInformationMessage('Open a diagram in the Diagrammer editor to auto-layout it.');
+            return false;
+        }
+        if (document.parseError) {
+            void vscode.window.showWarningMessage(`Cannot auto-layout ${document.uri.fsPath}: ${document.parseError}`);
+            return false;
+        }
+        return this.autoLayout(document, mode);
+    }
+
+    /** Applies a layout as a normal (dirtying, undoable) edit and refreshes every open view. */
+    private autoLayout(document: DiagramDocument, mode: LayoutMode): boolean {
+        if (document.parseError) {
+            return false;
+        }
+        const next = autoLayout(document.diagram, { mode });
+        if (next === document.diagram) {
+            return false;
+        }
+        document.applyEdit('Auto layout', next);
+        for (const panel of this.panelsFor(document)) {
+            this.postMessage(panel, { type: 'update', diagram: document.diagram });
+        }
+        return true;
     }
 
     saveCustomDocument(document: DiagramDocument, cancellation: vscode.CancellationToken): Thenable<void> {
@@ -274,6 +339,11 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
 </body>
 </html>`;
     }
+}
+
+function activeDiagramUri(): vscode.Uri | undefined {
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    return input instanceof vscode.TabInputCustom && input.viewType === DIAGRAM_EDITOR_VIEW_TYPE ? input.uri : undefined;
 }
 
 function errorMessage(document: DiagramDocument): HostToWebviewMessage {

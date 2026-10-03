@@ -270,6 +270,15 @@ describe('webview canvas', () => {
         assert.strictEqual(h.lastEdit().diagram.edges[1].label, 'returns');
     });
 
+    it('asks the host to apply the default auto layout from the toolbar button', () => {
+        const h = setup();
+        const button = h.document.getElementById('auto-layout') as HTMLButtonElement;
+        assert.ok(button, 'auto layout button should be rendered');
+        button.click();
+        assert.deepStrictEqual(h.sent[h.sent.length - 1], { type: 'autoLayout' });
+        assert.strictEqual(h.sent.filter((m) => m.type === 'edit').length, 0, 'layout is applied by the host');
+    });
+
     it('replaces its state when the host sends an update (undo/redo)', () => {
         const h = setup();
         h.send({ type: 'update', diagram: { ...SAMPLE, nodes: SAMPLE.nodes.slice(0, 1), edges: [] } });

@@ -7,6 +7,7 @@ import {
     createNode,
     Diagram,
     DiagramNode,
+    DEFAULT_NODE_SIZES,
     DiagramParseError,
     edgesForNode,
     getEdgeEndpoints,
@@ -14,6 +15,7 @@ import {
     moveNode,
     nextId,
     parseDiagram,
+    parseDiagramWithPlacement,
     removeEdge,
     removeElement,
     removeNode,
@@ -86,6 +88,29 @@ describe('diagram model', () => {
             assert.strictEqual(d.nodes[0].label, '');
             assert.deepStrictEqual(d.edges, []);
         });
+
+        it('accepts nodes without coordinates or size and reports them as unpositioned', () => {
+            const text = JSON.stringify({
+                nodes: [
+                    { id: 'a', type: 'rectangle', x: 5, y: 6, width: 30, height: 20 },
+                    { id: 'b', type: 'ellipse', label: 'B' },
+                    { id: 'c', type: 'diamond', x: 10 },
+                ],
+            });
+            const { diagram, unpositioned } = parseDiagramWithPlacement(text);
+            assert.deepStrictEqual(unpositioned, ['b', 'c']);
+            assert.deepStrictEqual(diagram.nodes[1], {
+                id: 'b',
+                type: 'ellipse',
+                x: 0,
+                y: 0,
+                width: DEFAULT_NODE_SIZES.ellipse.width,
+                height: DEFAULT_NODE_SIZES.ellipse.height,
+                label: 'B',
+            });
+            assert.deepStrictEqual(parseDiagram(text), diagram);
+            assert.deepStrictEqual(parseDiagramWithPlacement(serializeDiagram(diagram)).unpositioned, []);
+        });
     });
 
     describe('malformed input', () => {
@@ -98,7 +123,8 @@ describe('diagram model', () => {
             ['an unsupported future version', '{"version":99,"nodes":[],"edges":[]}'],
             ['a non-numeric version', '{"version":"1","nodes":[],"edges":[]}'],
             ['an unknown node type', '{"version":1,"nodes":[{"id":"a","type":"hexagon","x":0,"y":0,"width":1,"height":1,"label":""}],"edges":[]}'],
-            ['a node with a missing coordinate', '{"version":1,"nodes":[{"id":"a","type":"rectangle","y":0,"width":10,"height":10,"label":""}],"edges":[]}'],
+            ['a node with a null coordinate', '{"version":1,"nodes":[{"id":"a","type":"rectangle","x":null,"y":0,"width":10,"height":10,"label":""}],"edges":[]}'],
+            ['a node with a string width', '{"version":1,"nodes":[{"id":"a","type":"rectangle","x":0,"y":0,"width":"10","height":10,"label":""}],"edges":[]}'],
             ['a node with a string coordinate', '{"version":1,"nodes":[{"id":"a","type":"rectangle","x":"0","y":0,"width":10,"height":10,"label":""}],"edges":[]}'],
             ['a node without an id', '{"version":1,"nodes":[{"type":"rectangle","x":0,"y":0,"width":10,"height":10,"label":""}],"edges":[]}'],
             ['a non-string label', '{"version":1,"nodes":[{"id":"a","type":"rectangle","x":0,"y":0,"width":10,"height":10,"label":5}],"edges":[]}'],

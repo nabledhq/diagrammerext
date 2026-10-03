@@ -160,6 +160,36 @@ function buildPalette(): void {
         });
         palette.appendChild(button);
     }
+
+    palette.appendChild(document.createElement('hr')).className = 'palette-separator';
+    const layoutButton = document.createElement('button');
+    layoutButton.id = 'auto-layout';
+    layoutButton.className = 'toolbar-action';
+    layoutButton.type = 'button';
+    layoutButton.title = 'Auto layout (top to bottom)';
+    layoutButton.setAttribute('aria-label', 'Auto layout');
+    const icon = svgEl('svg', { width: '40', height: '28', viewBox: '0 0 40 28' }) as SVGSVGElement;
+    icon.append(
+        svgEl('rect', { class: 'toolbar-icon', x: '15', y: '1', width: '10', height: '7' }),
+        svgEl('rect', { class: 'toolbar-icon', x: '4', y: '20', width: '10', height: '7' }),
+        svgEl('rect', { class: 'toolbar-icon', x: '26', y: '20', width: '10', height: '7' }),
+        svgEl('path', { class: 'toolbar-icon-line', d: 'M20 8 V14 M9 20 V14 H31 V20' }),
+    );
+    const caption = document.createElement('span');
+    caption.textContent = 'Auto layout';
+    layoutButton.append(icon, caption);
+    layoutButton.addEventListener('click', requestAutoLayout);
+    palette.appendChild(layoutButton);
+}
+
+/** Layout runs in the extension host, which applies it as a normal edit and sends back an update. */
+function requestAutoLayout(): void {
+    if (!diagram) {
+        return;
+    }
+    closeLabelEditor(true);
+    interaction = { kind: 'none' };
+    vscode.postMessage({ type: 'autoLayout' });
 }
 
 function paletteIcon(type: NodeType): SVGElement {
