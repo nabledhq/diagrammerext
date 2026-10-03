@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "ellipse", "label": "Start" },
+    { "id": "parse", "type": "rectangle", "label": "Parse input" },
+    { "id": "valid", "type": "diamond", "label": "Valid?" },
+    { "id": "save", "type": "rectangle", "label": "Save" },
+    { "id": "error", "type": "sticky", "label": "Report error" },
+    { "id": "done", "type": "ellipse", "label": "Done" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "start", "to": "parse" },
+    { "id": "e2", "from": "parse", "to": "valid" },
+    { "id": "e3", "from": "valid", "to": "save", "label": "yes" },
+    { "id": "e4", "from": "valid", "to": "error", "label": "no" },
+    { "id": "e5", "from": "save", "to": "done" },
+    { "id": "e6", "from": "error", "to": "done" }
+  ]
+}
