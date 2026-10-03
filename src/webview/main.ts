@@ -55,6 +55,8 @@ const errorBox = document.getElementById('error') as HTMLDivElement;
 
 let diagram: Diagram | undefined;
 let selection: Selection;
+/** Node ids last sent to the host in a `selection` message. */
+let reportedSelection: string[] = [];
 let interaction: Interaction = { kind: 'none' };
 let labelEditor: HTMLTextAreaElement | undefined;
 
@@ -528,8 +530,6 @@ function updateSelectionClasses(): void {
     }
     reportSelection();
 }
-
-let reportedSelection: string[] = [];
 
 /** Tells the host which nodes are selected (used as context for AI edits). Only sent on change. */
 function reportSelection(): void {
