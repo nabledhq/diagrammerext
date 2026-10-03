@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { registerAICommands } from './ai/commands';
+import { VsCodeLanguageModelProvider } from './ai/vscodeLmProvider';
 import { DiagramEditorProvider, RenderReport } from './diagramEditor';
 import { LayoutMode } from './layout';
 import { NEW_DIAGRAM_COMMAND, newDiagram } from './newDiagram';
@@ -26,6 +28,7 @@ export function activate(context: vscode.ExtensionContext): DiagrammerApi {
             ),
         );
     }
+    registerAICommands(context, provider, new VsCodeLanguageModelProvider());
     return { onDidRender: provider.onDidRender };
 }
 

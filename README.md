@@ -131,7 +131,7 @@ the format (invalid JSON, wrong types, unknown node types, duplicate ids) is rep
 
 ## Running the extension
 
-Requirements: Node.js 20.19+ (or 22.13+) and VS Code 1.85+.
+Requirements: Node.js 20.19+ (or 22.13+) and VS Code 1.90+.
 
 ```bash
 npm install

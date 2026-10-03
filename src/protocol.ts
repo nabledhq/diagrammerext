@@ -8,7 +8,9 @@ export type WebviewToHostMessage =
     /** Asks the host to auto-layout the diagram (default mode when `mode` is omitted). */
     | { type: 'autoLayout'; mode?: LayoutMode }
     /** Reported after each full render with the number of node and edge elements drawn. */
-    | { type: 'rendered'; nodes: number; edges: number };
+    | { type: 'rendered'; nodes: number; edges: number }
+    /** Sent whenever the selected nodes change (the editor currently selects at most one node). */
+    | { type: 'selection'; nodeIds: string[] };
 
 /** Messages sent from the extension host to the webview. */
 export type HostToWebviewMessage =

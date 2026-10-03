@@ -286,6 +286,7 @@ function render(): void {
     }
 
     updateCanvasSize();
+    reportSelection();
 }
 
 function shapeElement(node: DiagramNode): SVGElement {
@@ -524,6 +525,18 @@ function updateSelectionClasses(): void {
     for (const el of svg.querySelectorAll('.node, .edge')) {
         const kind = el.classList.contains('node') ? 'node' : 'edge';
         el.classList.toggle('selected', selection?.kind === kind && selection.id === el.getAttribute('data-id'));
+    }
+    reportSelection();
+}
+
+let reportedSelection: string[] = [];
+
+/** Tells the host which nodes are selected (used as context for AI edits). Only sent on change. */
+function reportSelection(): void {
+    const nodeIds = selection?.kind === 'node' && diagram && findNode(diagram, selection.id) ? [selection.id] : [];
+    if (nodeIds.length !== reportedSelection.length || nodeIds.some((id, i) => id !== reportedSelection[i])) {
+        reportedSelection = nodeIds;
+        vscode.postMessage({ type: 'selection', nodeIds });
     }
 }
 
