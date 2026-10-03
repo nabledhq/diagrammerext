@@ -23,6 +23,10 @@ reviewed, diffed and versioned like any other file.
 - **Auto layout** – arrange the whole diagram automatically with [dagre](https://github.com/dagrejs/dagre)
   (see [Auto layout](#auto-layout) below), from the toolbar button or the Command Palette. Nodes
   written without coordinates are placed automatically when the file is opened.
+- **Edit Diagram with AI** – describe a change in plain language; a VS Code language model
+  (e.g. GitHub Copilot) turns it into validated edit operations, you review a summary, and only then
+  is it applied as one undoable edit. Agents can call `diagrammer.applyOperations` directly. See
+  [AI editing](#ai-editing).
 - **VS Code integration** – edits mark the file dirty, `Ctrl+S`/`Cmd+S` saves, and
   `Ctrl+Z`/`Ctrl+Y` (or `Cmd+Z`/`Cmd+Shift+Z`) undo and redo through VS Code's edit history. Hot
   exit/backups, *Save As* and *Revert File* are supported. Colours follow the active VS Code theme.
@@ -97,6 +101,24 @@ The layout engine (`src/layout/index.ts`) is plain TypeScript with no VS Code de
 script or a future CLI/MCP tool can call `computeLayout`, `autoLayout` or `placeUnpositioned`
 directly.
 
+## AI editing
+
+- **`Diagrammer: Edit Diagram with AI`** (`diagrammer.editWithAI`, while a Diagrammer editor is
+  active) asks for an instruction, sends the diagram, the selected node and the operation schema to
+  the first chat model available through the VS Code Language Model API, validates the returned
+  operations and shows a summary (*Add 1 node: "Cache"*, *Rename "API" → "Public API"*, …) with
+  **Apply (keep positions)**, **Apply and Re-layout** and **Cancel**. Invalid model output is
+  reported and never changes the diagram. No API keys are needed or stored; you need an extension
+  that provides chat models, such as GitHub Copilot Chat.
+- **`diagrammer.applyOperations`** – `executeCommand('diagrammer.applyOperations', uri?, operations)`
+  validates and applies a batch of operations without any model call or UI and returns
+  `{ summary, idMap }` or `{ errors }`.
+
+Operations (`addNode`, `removeNode`, `renameNode`, `moveNode`, `addConnector`, `removeConnector`,
+`updateNodeMetadata`, `updateConnectorMetadata`, `applyLayout`), the id/tempId rules and the JSON
+Schema are documented in [docs/operations.md](docs/operations.md). Batches are atomic and applied
+through the normal edit path, so undo and saving work as usual.
+
 ## File format
 
 ```json
@@ -149,7 +171,7 @@ Development Host. In it, run **Diagrammer: New Diagram** from the Command Palett
 | `npm run compile` | Type-check (`tsc --noEmit`) and bundle the extension and webview with esbuild. |
 | `npm run watch` | Rebuild on change. |
 | `npm run lint` | Run ESLint (typescript-eslint) over `src/`. |
-| `npm test` | Compile and run the unit tests with Mocha (model, layout engine and webview canvas in jsdom). |
+| `npm test` | Compile and run the unit tests with Mocha (model, layout engine, AI operations and edit flow, webview canvas in jsdom). |
 | `npm run test:integration` | Launch VS Code via `@vscode/test-electron` and run the end-to-end tests. Downloads VS Code on first run; on Linux CI wrap it in `xvfb-run -a`. |
 | `npm run package` | Production (minified) bundle. |
 
@@ -159,6 +181,9 @@ Project layout:
 - `src/diagramEditor.ts` – `CustomEditorProvider`, document model, save/revert/backup, undo/redo.
 - `src/newDiagram.ts` – the `Diagrammer: New Diagram` command.
 - `src/layout/index.ts` – pure auto-layout engine (dagre), usable without VS Code.
+- `src/ai/` – AI editing: `operations.ts` (pure operation schema, validator and `applyOperations`),
+  `prompt.ts`, `editSession.ts` (the confirm-before-apply flow), `provider.ts`
+  (`DiagramAIProvider`), `vscodeLmProvider.ts` (`vscode.lm`) and `commands.ts`.
 - `src/model/diagram.ts` – pure diagram model: parsing/validation, serialization, edits, geometry.
   Shared by the extension host and the webview.
 - `src/webview/main.ts`, `media/diagram.css` – the SVG canvas (no third-party diagram library;
