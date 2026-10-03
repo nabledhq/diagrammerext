@@ -36,7 +36,8 @@ body {
     overflow-y: auto;
 }
 
-.palette-item {
+.palette-item,
+.toolbar-action {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -52,12 +53,37 @@ body {
     cursor: grab;
 }
 
-.palette-item:hover {
+.palette-item:hover,
+.toolbar-action:hover {
     background: var(--vscode-list-hoverBackground);
 }
 
-.palette-item:focus-visible {
+.palette-item:focus-visible,
+.toolbar-action:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
+}
+
+.palette-separator {
+    width: 100%;
+    margin: 4px 0;
+    border: none;
+    border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+}
+
+.toolbar-action {
+    cursor: pointer;
+}
+
+.toolbar-icon {
+    fill: none;
+    stroke: var(--vscode-foreground);
+    stroke-width: 1.5;
+}
+
+.toolbar-icon-line {
+    fill: none;
+    stroke: var(--vscode-foreground);
+    stroke-width: 1;
 }
 
 .palette-text {

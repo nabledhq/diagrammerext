@@ -36,8 +36,39 @@
         "command": "diagrammer.newDiagram",
         "title": "New Diagram",
         "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.autoLayout",
+        "title": "Auto Layout",
+        "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.autoLayoutTopToBottom",
+        "title": "Auto Layout Top to Bottom",
+        "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.autoLayoutLeftToRight",
+        "title": "Auto Layout Left to Right",
+        "category": "Diagrammer"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "diagrammer.autoLayout",
+          "when": "activeCustomEditorId == diagrammer.diagramEditor"
+        },
+        {
+          "command": "diagrammer.autoLayoutTopToBottom",
+          "when": "activeCustomEditorId == diagrammer.diagramEditor"
+        },
+        {
+          "command": "diagrammer.autoLayoutLeftToRight",
+          "when": "activeCustomEditorId == diagrammer.diagramEditor"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -52,6 +83,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@types/dagre": "^0.7.54",
     "@types/jsdom": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.43",
@@ -63,5 +95,8 @@
     "mocha": "^12.0.3",
     "typescript": "~5.9",
     "typescript-eslint": "^8.71.0"
+  },
+  "dependencies": {
+    "dagre": "^0.8.5"
   }
 }

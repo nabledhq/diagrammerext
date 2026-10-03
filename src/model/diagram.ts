@@ -105,8 +105,23 @@ export function serializeDiagram(diagram: Diagram): string {
  * - Edges that reference unknown nodes are dropped rather than failing the whole file.
  */
 export function parseDiagram(text: string): Diagram {
+    return parseDiagramWithPlacement(text).diagram;
+}
+
+export interface ParsedDiagram {
+    /** The diagram; nodes listed in `unpositioned` have placeholder coordinates of 0. */
+    diagram: Diagram;
+    /** Ids of nodes whose `x` or `y` was missing in the source and still need to be placed. */
+    unpositioned: string[];
+}
+
+/**
+ * Like `parseDiagram`, but also reports which nodes had no coordinates so the caller can place
+ * them (for example with auto-layout).
+ */
+export function parseDiagramWithPlacement(text: string): ParsedDiagram {
     if (text.trim() === '') {
-        return createEmptyDiagram();
+        return { diagram: createEmptyDiagram(), unpositioned: [] };
     }
     let raw: unknown;
     try {
@@ -114,10 +129,14 @@ export function parseDiagram(text: string): Diagram {
     } catch (err) {
         throw new DiagramParseError(`Invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return validateDiagram(raw);
+    return validateDiagramWithPlacement(raw);
 }
 
 export function validateDiagram(raw: unknown): Diagram {
+    return validateDiagramWithPlacement(raw).diagram;
+}
+
+function validateDiagramWithPlacement(raw: unknown): ParsedDiagram {
     if (!isRecord(raw)) {
         throw new DiagramParseError('Diagram must be a JSON object.');
     }
@@ -141,13 +160,17 @@ export function validateDiagram(raw: unknown): Diagram {
 
     const nodes: DiagramNode[] = [];
     const nodeIds = new Set<string>();
+    const unpositioned: string[] = [];
     rawNodes.forEach((rawNode, index) => {
-        const node = validateNode(rawNode, index);
+        const { node, positioned } = validateNode(rawNode, index);
         if (nodeIds.has(node.id)) {
             throw new DiagramParseError(`Duplicate node id "${node.id}".`);
         }
         nodeIds.add(node.id);
         nodes.push(node);
+        if (!positioned) {
+            unpositioned.push(node.id);
+        }
     });
 
     const edges: DiagramEdge[] = [];
@@ -163,10 +186,14 @@ export function validateDiagram(raw: unknown): Diagram {
         }
     });
 
-    return { version: DIAGRAM_VERSION, nodes, edges };
+    return { diagram: { version: DIAGRAM_VERSION, nodes, edges }, unpositioned };
 }
 
-function validateNode(raw: unknown, index: number): DiagramNode {
+/**
+ * `x`/`y` may be omitted (the node is then reported as unpositioned), and `width`/`height` default
+ * to the shape's default size, so hand- or AI-written files only need ids, types and labels.
+ */
+function validateNode(raw: unknown, index: number): { node: DiagramNode; positioned: boolean } {
     const where = `nodes[${index}]`;
     if (!isRecord(raw)) {
         throw new DiagramParseError(`${where} must be an object.`);
@@ -178,15 +205,24 @@ function validateNode(raw: unknown, index: number): DiagramNode {
     if (!isNodeType(raw.type)) {
         throw new DiagramParseError(`${where}.type must be one of: ${NODE_TYPES.join(', ')}.`);
     }
-    return {
+    const defaults = DEFAULT_NODE_SIZES[raw.type];
+    const positioned = raw.x !== undefined && raw.y !== undefined;
+    const node: DiagramNode = {
         id,
         type: raw.type,
-        x: requireNumber(raw.x, `${where}.x`),
-        y: requireNumber(raw.y, `${where}.y`),
-        width: Math.max(MIN_NODE_SIZE, requireNumber(raw.width, `${where}.width`)),
-        height: Math.max(MIN_NODE_SIZE, requireNumber(raw.height, `${where}.height`)),
+        x: raw.x === undefined ? 0 : requireNumber(raw.x, `${where}.x`),
+        y: raw.y === undefined ? 0 : requireNumber(raw.y, `${where}.y`),
+        width: Math.max(
+            MIN_NODE_SIZE,
+            raw.width === undefined ? defaults.width : requireNumber(raw.width, `${where}.width`),
+        ),
+        height: Math.max(
+            MIN_NODE_SIZE,
+            raw.height === undefined ? defaults.height : requireNumber(raw.height, `${where}.height`),
+        ),
         label: raw.label === undefined ? '' : requireString(raw.label, `${where}.label`),
     };
+    return { node, positioned };
 }
 
 function validateEdge(raw: unknown, index: number): DiagramEdge {
