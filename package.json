@@ -1,0 +1,65 @@
+{
+  "name": "diagrammer",
+  "displayName": "Diagrammer",
+  "description": "Draw quick diagrams with shapes, labels and connectors, saved as .diagram.json files in your workspace.",
+  "version": "0.0.1",
+  "publisher": "nabled",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nabledhq/diagrammerext"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "diagrammer.diagramEditor",
+        "displayName": "Diagrammer",
+        "selector": [
+          {
+            "filenamePattern": "*.diagram.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "diagrammer.newDiagram",
+        "title": "New Diagram",
+        "category": "Diagrammer"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && node esbuild.js",
+    "package": "npm run check-types && node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "check-types": "tsc -p . --noEmit",
+    "lint": "eslint src",
+    "compile-tests": "tsc -p . --outDir out",
+    "test": "npm run compile-tests && mocha \"out/test/unit/**/*.test.js\"",
+    "test:integration": "npm run compile && npm run compile-tests && node ./out/test/integration/runTest.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.19.43",
+    "@types/vscode": "~1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.5",
+    "mocha": "^12.0.3",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.71.0"
+  }
+}
