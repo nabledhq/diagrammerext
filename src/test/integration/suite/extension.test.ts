@@ -231,4 +231,64 @@ describe('Diagrammer extension', () => {
         const after = await vscode.workspace.fs.readFile(uri);
         assert.deepStrictEqual(Buffer.from(after), Buffer.from(before));
     });
+    it('registers the Mermaid import and export commands', async () => {
+        const commands = await vscode.commands.getCommands(true);
+        for (const command of [
+            'diagrammer.importMermaidFromText',
+            'diagrammer.importMermaidFile',
+            'diagrammer.copyAsMermaid',
+            'diagrammer.exportMermaidFile',
+        ]) {
+            assert.ok(commands.includes(command), command);
+        }
+    });
+
+    it('Import Mermaid File creates a new laid-out diagram next to the .mmd file and opens it', async () => {
+        const created = await vscode.commands.executeCommand<vscode.Uri>('diagrammer.importMermaidFile', workspaceUri('flow.mmd'));
+        assert.ok(created?.path.endsWith('/flow.diagram.json'), created?.path);
+        const diagram = await readDiagramFile(created);
+        assert.deepStrictEqual(diagram.nodes.map((n) => n.label), ['Client', 'API', 'Cached?', 'Cache', 'Database']);
+        assert.deepStrictEqual(diagram.nodes.map((n) => n.type), ['rectangle', 'roundedRectangle', 'diamond', 'ellipse', 'rectangle']);
+        assert.deepStrictEqual(diagram.edges.map((e) => e.label ?? ''), ['HTTP', '', 'yes', 'no']);
+        assertNoOverlaps(diagram);
+        assert.ok(diagram.nodes[0].x < diagram.nodes[1].x && diagram.nodes[1].x < diagram.nodes[2].x);
+        const input = await waitFor('custom editor tab', activeCustomEditorInput);
+        assert.strictEqual(input.uri.toString(), created.toString());
+
+        // Importing again never overwrites the first import.
+        const second = await vscode.commands.executeCommand<vscode.Uri>('diagrammer.importMermaidFile', workspaceUri('flow.mmd'));
+        assert.ok(second?.path.endsWith('/flow-1.diagram.json'), second?.path);
+    });
+
+    it('Import Mermaid from Text uses the active editor and rejects non-flowcharts', async () => {
+        const rejected = await vscode.workspace.openTextDocument({ content: 'sequenceDiagram\n    A->>B: hi\n' });
+        await vscode.window.showTextDocument(rejected);
+        assert.strictEqual(await vscode.commands.executeCommand('diagrammer.importMermaidFromText'), undefined);
+
+        const doc = await vscode.workspace.openTextDocument({ content: 'graph TD\nX[One] --> Y[Two] --> Z[Three]\n' });
+        await vscode.window.showTextDocument(doc);
+        const created = await vscode.commands.executeCommand<vscode.Uri>('diagrammer.importMermaidFromText');
+        assert.ok(created?.path.endsWith('/mermaid-import.diagram.json'), created?.path);
+        const diagram = await readDiagramFile(created);
+        assert.deepStrictEqual(diagram.nodes.map((n) => n.label), ['One', 'Two', 'Three']);
+        assert.ok(diagram.nodes[0].y < diagram.nodes[1].y && diagram.nodes[1].y < diagram.nodes[2].y);
+    });
+
+    it('Copy as Mermaid and Export Mermaid File export the active diagram', async () => {
+        assert.strictEqual(await vscode.commands.executeCommand('diagrammer.copyAsMermaid'), undefined);
+
+        const uri = workspaceUri('sample.diagram.json');
+        await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+        await waitFor('custom editor tab', activeCustomEditorInput);
+        const text = await vscode.commands.executeCommand<string>('diagrammer.copyAsMermaid');
+        assert.ok(text?.startsWith('flowchart TD\n'), text);
+        assert.strictEqual(await vscode.env.clipboard.readText(), text);
+        const sample = await readDiagramFile(uri);
+        assert.strictEqual(text.trimEnd().split('\n').length, 1 + sample.nodes.length + sample.edges.length);
+
+        const target = workspaceUri('exported.mmd');
+        const written = await vscode.commands.executeCommand<vscode.Uri>('diagrammer.exportMermaidFile', uri, target);
+        assert.strictEqual(written?.toString(), target.toString());
+        assert.strictEqual(new TextDecoder().decode(await vscode.workspace.fs.readFile(target)), text);
+    });
 });
