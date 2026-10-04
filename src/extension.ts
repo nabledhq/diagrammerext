@@ -3,6 +3,7 @@ import { registerAICommands } from './ai/commands';
 import { VsCodeLanguageModelProvider } from './ai/vscodeLmProvider';
 import { DiagramEditorProvider, RenderReport } from './diagramEditor';
 import { LayoutMode } from './layout';
+import { registerMermaidCommands } from './mermaid/commands';
 import { NEW_DIAGRAM_COMMAND, newDiagram } from './newDiagram';
 
 export interface DiagrammerApi {
@@ -29,6 +30,7 @@ export function activate(context: vscode.ExtensionContext): DiagrammerApi {
         );
     }
     registerAICommands(context, provider, new VsCodeLanguageModelProvider());
+    registerMermaidCommands(context, provider);
     return { onDidRender: provider.onDidRender };
 }
 

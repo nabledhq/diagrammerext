@@ -61,6 +61,26 @@
         "command": "diagrammer.applyOperations",
         "title": "Apply Diagram Operations",
         "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.importMermaidFromText",
+        "title": "Import Mermaid from Text",
+        "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.importMermaidFile",
+        "title": "Import Mermaid File",
+        "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.copyAsMermaid",
+        "title": "Copy as Mermaid",
+        "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.exportMermaidFile",
+        "title": "Export Mermaid File",
+        "category": "Diagrammer"
       }
     ],
     "menus": {
