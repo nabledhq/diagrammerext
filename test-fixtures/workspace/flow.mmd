@@ -1,0 +1,7 @@
+%% Imported by the integration tests
+flowchart LR
+    A[Client] -->|HTTP| B(API)
+    B --> C{Cached?}
+    C -- yes --> D((Cache))
+    C -- no --> E[Database]
+    classDef db fill:#eee

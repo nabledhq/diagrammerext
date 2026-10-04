@@ -27,6 +27,8 @@ reviewed, diffed and versioned like any other file.
   (e.g. GitHub Copilot) turns it into validated edit operations, you review a summary, and only then
   is it applied as one undoable edit. Agents can call `diagrammer.applyOperations` directly. See
   [AI editing](#ai-editing).
+- **Mermaid import and export** – turn a Mermaid `flowchart` from a README or a `.mmd` file into a
+  laid-out diagram, or copy/export a diagram as Mermaid. See [Mermaid](#mermaid).
 - **VS Code integration** – edits mark the file dirty, `Ctrl+S`/`Cmd+S` saves, and
   `Ctrl+Z`/`Ctrl+Y` (or `Cmd+Z`/`Cmd+Shift+Z`) undo and redo through VS Code's edit history. Hot
   exit/backups, *Save As* and *Revert File* are supported. Colours follow the active VS Code theme.
@@ -119,6 +121,96 @@ Operations (`addNode`, `removeNode`, `renameNode`, `moveNode`, `addConnector`, `
 Schema are documented in [docs/operations.md](docs/operations.md). Batches are atomic and applied
 through the normal edit path, so undo and saving work as usual.
 
+## Mermaid
+
+Diagrammer can import and export [Mermaid](https://mermaid.js.org/) flowcharts, so diagrams can move
+between the visual editor and Markdown docs. Parsing is done by a small built-in parser
+(`src/mermaid/parse.ts`); the `mermaid` package is not used.
+
+| Command | ID | What it does |
+| --- | --- | --- |
+| `Diagrammer: Import Mermaid from Text` | `diagrammer.importMermaidFromText` | Imports the selection in the active text editor, or its whole content if nothing is selected. Without a text editor it opens an empty untitled document to paste into; run the command again afterwards. |
+| `Diagrammer: Import Mermaid File` | `diagrammer.importMermaidFile` | Picks a `.mmd` / `.mermaid` file and imports it. |
+| `Diagrammer: Copy as Mermaid` | `diagrammer.copyAsMermaid` | Copies the active diagram as Mermaid text to the clipboard. |
+| `Diagrammer: Export Mermaid File` | `diagrammer.exportMermaidFile` | Saves the active diagram as a `.mmd` file. |
+
+### Import
+
+An import always creates a **new** diagram file and opens it; it never changes an open diagram.
+The file is named after the source (`flow.mmd` → `flow.diagram.json`, next to it; text from an
+unsaved editor → `mermaid-import.diagram.json` in the first workspace folder) and gets a `-1`,
+`-2`, … suffix instead of overwriting an existing file. Nodes are placed with
+[auto layout](#auto-layout) in rank order along the Mermaid direction (`TD`/`TB` downwards, `BT`
+upwards, `LR` to the right, `RL` to the left), without overlaps.
+
+```mermaid
+flowchart LR
+    A[Client] -->|HTTP| B(API)
+    B --> C{Cached?}
+    C -- yes --> D((Cache))
+    C -- no --> E[Database]
+```
+
+imports as five nodes (rectangle, rounded rectangle, diamond, ellipse, rectangle) and four
+connectors labelled `HTTP`, (none), `yes` and `no`, laid out left to right.
+
+**Supported syntax**
+
+- Header: `flowchart` or `graph`, optionally followed by `TD`, `TB`, `BT`, `LR` or `RL` (default `TD`).
+- Nodes: `A`, `A[label]`, `A(label)`, `A{label}`, `A((label))`, and quoted labels such as
+  `A["label"]`. A node without a label uses its id as label.
+- Shapes: `[ ]` → rectangle, `( )` → rounded rectangle, `{ }` → diamond, `(( ))` → ellipse
+  (drawn as a circle). Other Mermaid shapes (`[( )]`, `{{ }}`, `([ ])`, …) import as rectangles
+  with a warning.
+- Edges: `-->`, `---`, `-.->` and `==>` (and longer variants such as `--->`). Diagrammer
+  connectors have a single style, so dotted, thick and arrow-less edges import as normal
+  connectors; their direction (source → target) is kept.
+- Edge labels: `A -->|text| B`, `A -->|"text"| B` and `A -- text --> B` (also `-. text .->` and
+  `== text ==>`).
+- Chains: `A --> B --> C`.
+- Several statements on one line separated by `;`.
+- `%%` comment lines (including `%%{init: …}%%` directives) and a leading `---` front-matter block.
+- Entity codes in labels (`#quot;`, `#35;`, …) and `<br>` line breaks.
+
+**Unsupported constructs** are skipped and reported as warnings with their 1-based line number
+(shown after the import; *Show Warnings* opens the full list in the *Diagrammer* output channel):
+
+- `subgraph` … `end` (the nodes and edges inside a subgraph are still imported),
+- `classDef`, `class` and the `:::class` shorthand,
+- `style` and `linkStyle`,
+- `click`,
+- `direction` inside subgraphs,
+- any other statement the parser does not understand (for example `A --> B & C`).
+
+Input that is not a flowchart – e.g. `sequenceDiagram` or `classDiagram`, or text whose first
+non-comment line is not `flowchart`/`graph` – is rejected with an error and no file is created.
+
+### Export
+
+```mermaid
+flowchart TD
+    node_1["Client"]
+    node_2("API #quot;v2#quot;")
+    node_3{"Cached?"}
+    node_1 -->|"HTTP"| node_2
+    node_2 --> node_3
+```
+
+- The output starts with `flowchart TD`, followed by one line per node and then one line per
+  connector, each indented by four spaces. Positions and sizes are not exported.
+- Node ids are reduced to `[A-Za-z0-9_]` (`node-1` → `node_1`); ids that collide afterwards get a
+  numeric suffix (`node_1_2`), and Mermaid keywords such as `end` get a `_` suffix.
+- Labels are always quoted. `"` is written as `#quot;` (and a `#` that would read as an entity as
+  `#35;`), line breaks as `<br>`; brackets and pipes are safe inside the quotes.
+- Shapes use the inverse of the import mapping: rectangle `[ ]`, rounded rectangle `( )`,
+  diamond `{ }`, ellipse `(( ))`; text and sticky notes become rectangles.
+- Without an active Diagrammer editor the export commands show an error.
+
+When called through `vscode.commands.executeCommand`, `importMermaidFile` accepts the `Uri` of the
+file to import, and `copyAsMermaid` / `exportMermaidFile` accept the `Uri` of an open diagram
+(`exportMermaidFile` also takes the target `Uri` as a second argument, skipping the save dialog).
+The commands return the created `Uri` or the Mermaid text, or `undefined` if nothing happened.
+
 ## File format
 
 ```json
@@ -171,7 +263,7 @@ Development Host. In it, run **Diagrammer: New Diagram** from the Command Palett
 | `npm run compile` | Type-check (`tsc --noEmit`) and bundle the extension and webview with esbuild. |
 | `npm run watch` | Rebuild on change. |
 | `npm run lint` | Run ESLint (typescript-eslint) over `src/`. |
-| `npm test` | Compile and run the unit tests with Mocha (model, layout engine, AI operations and edit flow, webview canvas in jsdom). |
+| `npm test` | Compile and run the unit tests with Mocha (model, layout engine, AI operations and edit flow, Mermaid import/export, webview canvas in jsdom). |
 | `npm run test:integration` | Launch VS Code via `@vscode/test-electron` and run the end-to-end tests. Downloads VS Code on first run; on Linux CI wrap it in `xvfb-run -a`. |
 | `npm run package` | Production (minified) bundle. |
 
@@ -181,6 +273,8 @@ Project layout:
 - `src/diagramEditor.ts` – `CustomEditorProvider`, document model, save/revert/backup, undo/redo.
 - `src/newDiagram.ts` – the `Diagrammer: New Diagram` command.
 - `src/layout/index.ts` – pure auto-layout engine (dagre), usable without VS Code.
+- `src/mermaid/` – Mermaid support: `parse.ts` (pure flowchart parser), `convert.ts` (pure
+  Mermaid ↔ diagram conversion and layout) and `commands.ts` (the import/export commands).
 - `src/ai/` – AI editing: `operations.ts` (pure operation schema, validator and `applyOperations`),
   `prompt.ts`, `editSession.ts` (the confirm-before-apply flow), `provider.ts`
   (`DiagramAIProvider`), `vscodeLmProvider.ts` (`vscode.lm`) and `commands.ts`.
