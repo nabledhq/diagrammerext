@@ -55,6 +55,8 @@ const errorBox = document.getElementById('error') as HTMLDivElement;
 
 let diagram: Diagram | undefined;
 let selection: Selection;
+/** Node ids last sent to the host in a `selection` message. */
+let reportedSelection: string[] = [];
 let interaction: Interaction = { kind: 'none' };
 let labelEditor: HTMLTextAreaElement | undefined;
 
@@ -286,6 +288,7 @@ function render(): void {
     }
 
     updateCanvasSize();
+    reportSelection();
 }
 
 function shapeElement(node: DiagramNode): SVGElement {
@@ -524,6 +527,16 @@ function updateSelectionClasses(): void {
     for (const el of svg.querySelectorAll('.node, .edge')) {
         const kind = el.classList.contains('node') ? 'node' : 'edge';
         el.classList.toggle('selected', selection?.kind === kind && selection.id === el.getAttribute('data-id'));
+    }
+    reportSelection();
+}
+
+/** Tells the host which nodes are selected (used as context for AI edits). Only sent on change. */
+function reportSelection(): void {
+    const nodeIds = selection?.kind === 'node' && diagram && findNode(diagram, selection.id) ? [selection.id] : [];
+    if (nodeIds.length !== reportedSelection.length || nodeIds.some((id, i) => id !== reportedSelection[i])) {
+        reportedSelection = nodeIds;
+        vscode.postMessage({ type: 'selection', nodeIds });
     }
 }
 

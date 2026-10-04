@@ -174,8 +174,31 @@ describe('webview canvas', () => {
         const count = h.sent.length;
         h.pointer('pointerdown', h.nodeEl('node-1').querySelector('.shape') as Element, 50, 25);
         h.pointer('pointerup', h.window, 50, 25);
-        assert.strictEqual(h.sent.length, count);
+        // Only the selection change is reported.
+        assert.deepStrictEqual(h.sent.slice(count), [{ type: 'selection', nodeIds: ['node-1'] }]);
         assert.ok(h.nodeEl('node-1').classList.contains('selected'));
+    });
+
+    it('reports selection changes to the host', () => {
+        const h = setup();
+        const selections = () => h.sent.filter((m) => m.type === 'selection');
+        assert.deepStrictEqual(selections(), [], 'an empty initial selection is not reported');
+        h.pointer('pointerdown', h.nodeEl('node-2').querySelector('.shape') as Element, 350, 25);
+        h.pointer('pointerup', h.window, 350, 25);
+        h.pointer('pointerdown', h.nodeEl('node-2').querySelector('.shape') as Element, 350, 25);
+        h.pointer('pointerup', h.window, 350, 25);
+        assert.deepStrictEqual(selections(), [{ type: 'selection', nodeIds: ['node-2'] }], 'unchanged selection is not resent');
+        // Selecting a connector means no node is selected.
+        h.pointer('pointerdown', h.edgeLine('edge-1'), 200, 25);
+        assert.deepStrictEqual(selections()[selections().length - 1], { type: 'selection', nodeIds: [] });
+        h.pointer('pointerdown', h.nodeEl('node-3').querySelector('.shape') as Element, 50, 325);
+        h.pointer('pointerup', h.window, 50, 325);
+        // The host removes the selected node (e.g. an AI edit): the selection is cleared.
+        h.send({ type: 'update', diagram: { ...SAMPLE, nodes: SAMPLE.nodes.slice(0, 2), edges: SAMPLE.edges.slice(0, 1) } });
+        assert.deepStrictEqual(selections().slice(-2), [
+            { type: 'selection', nodeIds: ['node-3'] },
+            { type: 'selection', nodeIds: [] },
+        ]);
     });
 
     it('creates a connector by dragging from a handle to another node', () => {
@@ -207,7 +230,7 @@ describe('webview canvas', () => {
         h.pointer('pointermove', h.window, 700, 700);
         h.pointer('pointerup', h.window, 700, 700);
         assert.strictEqual(h.sent.filter((m) => m.type === 'edit').length, 0);
-        assert.strictEqual(h.sent.length, count);
+        assert.deepStrictEqual(h.sent.slice(count), [{ type: 'selection', nodeIds: ['node-1'] }]);
     });
 
     it('deletes the selected node together with its connectors', () => {

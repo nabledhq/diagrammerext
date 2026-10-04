@@ -10,7 +10,7 @@
     "url": "https://github.com/nabledhq/diagrammerext"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Visualization",
@@ -51,6 +51,16 @@
         "command": "diagrammer.autoLayoutLeftToRight",
         "title": "Auto Layout Left to Right",
         "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.editWithAI",
+        "title": "Edit Diagram with AI",
+        "category": "Diagrammer"
+      },
+      {
+        "command": "diagrammer.applyOperations",
+        "title": "Apply Diagram Operations",
+        "category": "Diagrammer"
       }
     ],
     "menus": {
@@ -66,6 +76,14 @@
         {
           "command": "diagrammer.autoLayoutLeftToRight",
           "when": "activeCustomEditorId == diagrammer.diagramEditor"
+        },
+        {
+          "command": "diagrammer.editWithAI",
+          "when": "activeCustomEditorId == diagrammer.diagramEditor"
+        },
+        {
+          "command": "diagrammer.applyOperations",
+          "when": "false"
         }
       ]
     }
@@ -87,7 +105,7 @@
     "@types/jsdom": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.43",
-    "@types/vscode": "~1.85.0",
+    "@types/vscode": "~1.90.0",
     "@vscode/test-electron": "^3.1.0",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",

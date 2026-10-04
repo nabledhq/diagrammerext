@@ -175,6 +175,52 @@ describe('Diagrammer extension', () => {
         await vscode.commands.executeCommand('workbench.action.files.revert');
     });
 
+    it('registers the AI editing commands', async () => {
+        const commands = await vscode.commands.getCommands(true);
+        assert.ok(commands.includes('diagrammer.editWithAI'));
+        assert.ok(commands.includes('diagrammer.applyOperations'));
+    });
+
+    it('diagrammer.applyOperations applies valid batches as undoable edits and rejects invalid ones', async () => {
+        const uri = workspaceUri('sample.diagram.json');
+        const original = await readDiagramFile(uri);
+        await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE);
+        await waitFor('custom editor tab', activeCustomEditorInput);
+
+        const invalid = await vscode.commands.executeCommand<{ errors?: string[] }>('diagrammer.applyOperations', [
+            { op: 'renameNode', id: 'node-2', label: 'Public API' },
+            { op: 'removeNode', id: 'missing' },
+        ]);
+        assert.ok(invalid.errors && invalid.errors.length === 1, JSON.stringify(invalid));
+        assert.strictEqual(activeTab()?.isDirty, false);
+
+        const result = await vscode.commands.executeCommand<{ summary?: string[]; idMap?: Record<string, string> }>(
+            'diagrammer.applyOperations',
+            uri,
+            [
+                { op: 'renameNode', id: 'node-2', label: 'Public API' },
+                { op: 'addNode', tempId: 'queue', label: 'Queue' },
+                { op: 'addConnector', from: 'node-2', to: 'queue' },
+            ],
+        );
+        assert.deepStrictEqual(result.summary, ['Add 1 node: "Queue"', 'Rename "API" → "Public API"', 'Connect "API" → "Queue"']);
+        assert.strictEqual(activeTab()?.isDirty, true);
+
+        await vscode.commands.executeCommand('undo');
+        await waitFor('undo to clean the document', () => (activeTab()?.isDirty === false ? true : undefined));
+        await vscode.commands.executeCommand('redo');
+        await waitFor('redo to dirty the document', () => (activeTab()?.isDirty ? true : undefined));
+        await vscode.commands.executeCommand('workbench.action.files.save');
+
+        const saved = await readDiagramFile(uri);
+        const queueId = result.idMap?.queue;
+        assert.ok(queueId);
+        assert.strictEqual(saved.nodes.find((n) => n.id === 'node-2')?.label, 'Public API');
+        assert.ok(saved.nodes.some((n) => n.id === queueId && n.label === 'Queue'));
+        assert.ok(saved.edges.some((e) => e.from === 'node-2' && e.to === queueId));
+        assert.strictEqual(saved.edges.length, original.edges.length + 1);
+    });
+
     it('opens malformed files without throwing and leaves them untouched', async () => {
         const uri = workspaceUri('broken.diagram.json');
         const before = await vscode.workspace.fs.readFile(uri);

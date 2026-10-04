@@ -170,6 +170,8 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
 
     private readonly webviews = new Map<string, Set<vscode.WebviewPanel>>();
     private readonly documents = new Map<string, DiagramDocument>();
+    /** Node ids last reported as selected by each webview. */
+    private readonly selections = new Map<vscode.WebviewPanel, string[]>();
 
     constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -206,6 +208,7 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
         this.documents.set(key, document);
         panel.onDidDispose(() => {
             panels.delete(panel);
+            this.selections.delete(panel);
             if (panels.size === 0) {
                 this.webviews.delete(key);
                 this.documents.delete(key);
@@ -241,6 +244,9 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
                 case 'autoLayout':
                     this.autoLayout(document, isLayoutMode(message.mode) ? message.mode : DEFAULT_LAYOUT_MODE);
                     break;
+                case 'selection':
+                    this.selections.set(panel, Array.isArray(message.nodeIds) ? message.nodeIds : []);
+                    break;
                 case 'rendered':
                     this._onDidRender.fire({ uri: document.uri, nodes: message.nodes, edges: message.edges });
                     break;
@@ -275,11 +281,33 @@ export class DiagramEditorProvider implements vscode.CustomEditorProvider<Diagra
         if (next === document.diagram) {
             return false;
         }
-        document.applyEdit('Auto layout', next);
+        this.applyDocumentEdit(document, 'Auto layout', next);
+        return true;
+    }
+
+    /** Returns the open diagram with the given URI, or the one in the active Diagrammer editor. */
+    findDocument(uri?: vscode.Uri): DiagramDocument | undefined {
+        const target = uri ?? activeDiagramUri();
+        return target ? this.documents.get(target.toString()) : undefined;
+    }
+
+    /**
+     * Node ids selected in the document's editor: the active panel's selection, or that of any open
+     * panel if none is active. Ids of nodes that no longer exist are dropped.
+     */
+    selectedNodeIds(document: DiagramDocument): string[] {
+        const panels = [...this.panelsFor(document)];
+        const panel = panels.find((p) => p.active) ?? panels.find((p) => this.selections.has(p));
+        const ids = panel ? (this.selections.get(panel) ?? []) : [];
+        return ids.filter((id) => document.diagram.nodes.some((n) => n.id === id));
+    }
+
+    /** Applies a host-side change as a normal (dirtying, undoable) edit and refreshes every open view. */
+    applyDocumentEdit(document: DiagramDocument, label: string, diagram: Diagram): void {
+        document.applyEdit(label, diagram);
         for (const panel of this.panelsFor(document)) {
             this.postMessage(panel, { type: 'update', diagram: document.diagram });
         }
-        return true;
     }
 
     saveCustomDocument(document: DiagramDocument, cancellation: vscode.CancellationToken): Thenable<void> {
